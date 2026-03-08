@@ -152,7 +152,8 @@ class Game:
         self._last_hover_unit = None
         self.cursor_atk_preview = set()
         self._last_cursor_cell = None
-        self.ctx_menu = None
+        self.ctx_menu = False
+        self.confirm_dialog = None  # {"text": str, "action": str}
         self.phase_popup_until = 0.0
         self.phase_popup_text = f"ターン {self.turn}  自フェイズ"
         self.phase_popup_col = 12
@@ -214,7 +215,8 @@ class Game:
             if self._dragging and self.state not in (ST_WIN, ST_LOSE):
                 new_cam = self._drag_cam_start + (self._drag_start[1] - pyxel.mouse_y) / TILE
                 self.cam_y = max(0.0, min(float(MAP_H - VIEW_H), new_cam))
-                self.ctx_menu = None
+                self.ctx_menu = False
+                self.confirm_dialog = None
 
         tap = False
         if just_released:
@@ -292,6 +294,15 @@ class Game:
                 self._restart()
             return
 
+        # Confirm dialog handling (takes priority)
+        if self.confirm_dialog and tap:
+            self._upd_confirm()
+            return
+        # Context menu handling (takes priority over state)
+        if self.ctx_menu and tap:
+            self._upd_ctx_menu()
+            return
+
         if self.state == ST_FREE:
             self._upd_free(tap)
         elif self.state == ST_SELECTED:
@@ -301,22 +312,52 @@ class Game:
         elif self.state == ST_ENEMY:
             self._upd_enemy()
 
+    def _upd_confirm(self):
+        tmx, tmy = self._tap_screen_pos
+        dw, dh = 160, 60
+        dx = (SCREEN_W - dw) // 2
+        dy = (SCREEN_H - dh) // 2
+        btn_w, btn_h = 60, 22
+        btn_y = dy + dh - btn_h - 6
+        yes_x = dx + 10
+        no_x = dx + dw - btn_w - 10
+        if btn_y <= tmy <= btn_y + btn_h:
+            if yes_x <= tmx <= yes_x + btn_w:
+                action = self.confirm_dialog["action"]
+                self.confirm_dialog = None
+                self.ctx_menu = False
+                if action == "end_turn":
+                    self._start_enemy_turn()
+                elif action == "restart":
+                    self._restart()
+                return
+            if no_x <= tmx <= no_x + btn_w:
+                self.confirm_dialog = None
+                return
+        # Tap outside dialog → close
+        if not (dx <= tmx <= dx + dw and dy <= tmy <= dy + dh):
+            self.confirm_dialog = None
+
+    def _upd_ctx_menu(self):
+        tmx, tmy = self._tap_screen_pos
+        mw, item_h = 140, 24
+        mh = item_h * 2
+        mx = (SCREEN_W - mw) // 2
+        my = (SCREEN_H - mh) // 2
+        if mx <= tmx <= mx + mw and my <= tmy <= my + mh:
+            idx = (tmy - my) // item_h
+            if idx == 0:
+                self.ctx_menu = False
+                self.confirm_dialog = {"text": "ターンを終了しますか？", "action": "end_turn"}
+            elif idx == 1:
+                self.ctx_menu = False
+                self.confirm_dialog = {"text": "最初からやり直しますか？", "action": "restart"}
+            return
+        # Tap outside menu → close
+        self.ctx_menu = False
+
     def _upd_free(self, tap):
         if not tap:
-            return
-
-        # Context menu handling
-        if self.ctx_menu:
-            pmx, pmy = self.ctx_menu
-            mw, mh = 80, 22
-            pmx = min(pmx, SCREEN_W - mw - 2)
-            pmy = min(pmy, SCREEN_H - mh - 2)
-            tmx, tmy = self._tap_screen_pos
-            if pmx <= tmx <= pmx + mw and pmy <= tmy <= pmy + mh:
-                self.ctx_menu = None
-                self._start_enemy_turn()
-                return
-            self.ctx_menu = None
             return
 
         cx, cy = self.cur_tx, self.cur_ty
@@ -351,8 +392,8 @@ class Game:
             self.hover_unit = None
             return
 
-        # Tap on empty tile → show context menu (ターン終了)
-        self.ctx_menu = self._tap_screen_pos
+        # Tap on empty tile → show context menu
+        self.ctx_menu = True
 
     def _upd_selected(self, tap):
         if not tap:
@@ -471,11 +512,13 @@ class Game:
         self.sel = None
         self.move_cells = set()
         self.atk_cells = set()
+        self.hover_unit = None
         if self.state in (ST_WIN, ST_LOSE):
             return
         alive_players = [u for u in self.units if u.team == PLAYER and u.alive]
         if not alive_players or all(u.done for u in alive_players):
-            self._start_enemy_turn()
+            self.state = ST_FREE
+            self.confirm_dialog = {"text": "ターンを終了しますか？", "action": "end_turn"}
         else:
             self.state = ST_FREE
 
@@ -500,7 +543,8 @@ class Game:
         self._last_hover_unit = None
         self.cursor_atk_preview = set()
         self._last_cursor_cell = None
-        self.ctx_menu = None
+        self.ctx_menu = False
+        self.confirm_dialog = None
         self.popups = []
         self.phase_popup_text = f"ターン {self.turn}  自フェイズ"
         self.phase_popup_col = 12
@@ -525,7 +569,8 @@ class Game:
         self.sel = None
         self.move_cells = set()
         self.atk_cells = set()
-        self.ctx_menu = None
+        self.ctx_menu = False
+        self.confirm_dialog = None
         self.hover_unit = None
         self.hover_preview_move = set()
         self.hover_preview_atk = set()
@@ -937,15 +982,43 @@ class Game:
         if self.hover_unit and self.state not in (ST_WIN, ST_LOSE) and not self.anim_path:
             self._draw_hover_info(self.hover_unit, cx, cy)
 
-        # Context menu (ターン終了)
-        if self.ctx_menu and self.state == ST_FREE:
-            pmx, pmy = self.ctx_menu
-            mw, mh = 80, 22
-            pmx = min(pmx, SCREEN_W - mw - 2)
-            pmy = min(pmy, SCREEN_H - mh - 2)
-            pyxel.rect(pmx, pmy, mw, mh, 1)
-            pyxel.rectb(pmx, pmy, mw, mh, 13)
-            pyxel.text(pmx + 6, pmy + 5, "ターン終了", 7, self.font12)
+        # Context menu (centered, 2 items)
+        if self.ctx_menu and self.state == ST_FREE and not self.confirm_dialog:
+            mw, item_h = 140, 24
+            mh = item_h * 2
+            mx = (SCREEN_W - mw) // 2
+            my = (SCREEN_H - mh) // 2
+            pyxel.rect(mx, my, mw, mh, 1)
+            pyxel.rectb(mx, my, mw, mh, 13)
+            pyxel.line(mx, my + item_h, mx + mw - 1, my + item_h, 13)
+            items = ["ターン終了", "最初からやり直す"]
+            for i, label in enumerate(items):
+                tw = self.font12.text_width(label)
+                pyxel.text(mx + (mw - tw) // 2, my + i * item_h + 6, label, 7, self.font12)
+
+        # Confirm dialog
+        if self.confirm_dialog:
+            dw, dh = 160, 60
+            dx = (SCREEN_W - dw) // 2
+            dy = (SCREEN_H - dh) // 2
+            pyxel.rect(dx, dy, dw, dh, 1)
+            pyxel.rectb(dx, dy, dw, dh, 13)
+            tw = self.font12.text_width(self.confirm_dialog["text"])
+            pyxel.text(dx + (dw - tw) // 2, dy + 8, self.confirm_dialog["text"], 7, self.font12)
+            btn_w, btn_h = 60, 22
+            btn_y = dy + dh - btn_h - 6
+            yes_x = dx + 10
+            no_x = dx + dw - btn_w - 10
+            pyxel.rect(yes_x, btn_y, btn_w, btn_h, 5)
+            pyxel.rectb(yes_x, btn_y, btn_w, btn_h, 12)
+            yt = "はい"
+            ytw = self.font12.text_width(yt)
+            pyxel.text(yes_x + (btn_w - ytw) // 2, btn_y + 5, yt, 12, self.font12)
+            pyxel.rect(no_x, btn_y, btn_w, btn_h, 5)
+            pyxel.rectb(no_x, btn_y, btn_w, btn_h, 13)
+            nt = "いいえ"
+            ntw = self.font12.text_width(nt)
+            pyxel.text(no_x + (btn_w - ntw) // 2, btn_y + 5, nt, 13, self.font12)
 
         # Phase popup
         if time.time() < self.phase_popup_until:
