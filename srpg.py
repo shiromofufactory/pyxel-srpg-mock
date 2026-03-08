@@ -192,6 +192,7 @@ class Game:
     # ── Update ────────────────────────────────────────────────────────────────
 
     def update(self):
+        pyxel.mouse(False)
         if self._first_frame:
             self._first_frame = False
             self.phase_popup_until = time.time() + 1.5
@@ -261,6 +262,12 @@ class Game:
                 self._last_cursor_cell = None
                 self.cursor_atk_preview = set()
 
+        # Phase popup blocks all game logic; tap to dismiss
+        if time.time() < self.phase_popup_until:
+            if tap:
+                self.phase_popup_until = 0.0
+            return
+
         # Update popups
         for p in self.popups:
             if p.get("delay", 0) > 0:
@@ -274,12 +281,6 @@ class Game:
         for u in self.units:
             if u.fade_timer > 0:
                 u.fade_timer -= 1
-
-        # Phase popup blocks all game logic; tap to dismiss
-        if time.time() < self.phase_popup_until:
-            if tap:
-                self.phase_popup_until = 0.0
-            return
 
         if self.anim_path:
             self._upd_anim()
@@ -343,6 +344,11 @@ class Game:
             None,
         )
         if any_unit:
+            return
+
+        # If hover info is showing, first tap just dismisses it
+        if self.hover_unit:
+            self.hover_unit = None
             return
 
         # Tap on empty tile → show context menu (ターン終了)
@@ -520,6 +526,12 @@ class Game:
         self.move_cells = set()
         self.atk_cells = set()
         self.ctx_menu = None
+        self.hover_unit = None
+        self.hover_preview_move = set()
+        self.hover_preview_atk = set()
+        self._last_hover_unit = None
+        self.cursor_atk_preview = set()
+        self._last_cursor_cell = None
         # Snap camera to enemy general
         eg = next((u for u in self.units if u.team == ENEMY and u.is_general and u.alive), None)
         if eg:
@@ -534,6 +546,11 @@ class Game:
         self.move_cells = set()
         self.atk_cells = set()
         self.hover_unit = None
+        self.hover_preview_move = set()
+        self.hover_preview_atk = set()
+        self._last_hover_unit = None
+        self.cursor_atk_preview = set()
+        self._last_cursor_cell = None
         for u in self.units:
             if u.team == PLAYER:
                 u.reset_turn()
@@ -900,6 +917,14 @@ class Game:
 
     def _draw_cursor(self, cx, cy):
         if self.state in (ST_WIN, ST_LOSE, ST_ENEMY):
+            return
+        # Only show cursor on tiles with units or when selecting move/attack targets
+        show = False
+        if self.state in (ST_SELECTED, ST_MOVED):
+            show = True
+        elif any(u.alive and u.x == self.cur_tx and u.y == self.cur_ty for u in self.units):
+            show = True
+        if not show:
             return
         sx = (self.cur_tx - cx) * TILE
         sy = (self.cur_ty - cy) * TILE
