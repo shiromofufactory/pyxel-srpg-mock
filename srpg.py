@@ -163,7 +163,7 @@ class Game:
         self._drag_cam_start = 0.0
         self._dragging = False
         self._tap_screen_pos = (0, 0)
-        pyxel.mouse(True)
+        pyxel.mouse(False)
         pyxel.run(self.update, self.draw)
 
     def _setup_units(self):
@@ -440,13 +440,14 @@ class Game:
                     self._finish_unit()
             return
 
-        # Tap anywhere else → undo move (right-click equivalent)
+        # Tap anywhere else → undo move and deselect
         self.sel.x, self.sel.y = self.pre_move
         self.sel.moved = False
         self.pre_move = None
+        self.sel = None
         self.atk_cells = set()
-        self.move_cells = self._get_move_range(self.sel)
-        self.state = ST_SELECTED
+        self.move_cells = set()
+        self.state = ST_FREE
 
     def _finish_unit(self):
         self.sel = None
@@ -490,6 +491,10 @@ class Game:
 
     def _start_player_turn(self):
         self.state = ST_FREE
+        self.sel = None
+        self.move_cells = set()
+        self.atk_cells = set()
+        self.hover_unit = None
         for u in self.units:
             if u.team == PLAYER:
                 u.reset_turn()
@@ -581,21 +586,21 @@ class Game:
             self.enemy_timer = ENEMY_INTERVAL
 
     def _do_attack(self, attacker, defender):
-        # Snap camera if attacker is off-screen
-        icy = int(self.cam_y)
-        if not (icy <= attacker.y < icy + VIEW_H):
-            self.cam_y = max(0.0, min(float(MAP_H - VIEW_H), float(attacker.y) - VIEW_H / 2))
+        ATK_PAUSE = 8
         DMG_POPUP_DUR = 12
         COUNTER_DELAY = 10
+        # Always snap camera to attacker
+        self.cam_y = max(0.0, min(float(MAP_H - VIEW_H), float(attacker.y) - VIEW_H / 2))
         base = max(1, attacker.atk - defender.def_)
         mult = TYPE_ADV.get((attacker.type, defender.type), 1.0)
         tdef = FOREST_DEF if self.map_data[defender.y][defender.x] == FOREST else 0
         dmg = max(1, int((base - tdef) * mult))
         defender.hp = max(0, defender.hp - dmg)
         self.popups.append({"x": defender.x, "y": defender.y, "text": str(dmg),
-                            "timer": DMG_POPUP_DUR, "col": 8, "oy": 0})
+                            "timer": DMG_POPUP_DUR, "col": 8, "oy": 0,
+                            "delay": ATK_PAUSE})
         if defender.hp <= 0:
-            defender.fade_timer = 20
+            defender.fade_timer = 20 + ATK_PAUSE
 
         if defender.hp > 0:
             crng = self._get_atk_range(defender)
@@ -607,9 +612,9 @@ class Game:
                 attacker.hp = max(0, attacker.hp - cdmg)
                 self.popups.append({"x": attacker.x, "y": attacker.y, "text": str(cdmg),
                                     "timer": DMG_POPUP_DUR, "col": 8, "oy": 0,
-                                    "delay": COUNTER_DELAY})
+                                    "delay": ATK_PAUSE + COUNTER_DELAY})
                 if attacker.hp <= 0:
-                    attacker.fade_timer = 20 + COUNTER_DELAY
+                    attacker.fade_timer = 20 + ATK_PAUSE + COUNTER_DELAY
 
     # ── Pathfinding ───────────────────────────────────────────────────────────
 
