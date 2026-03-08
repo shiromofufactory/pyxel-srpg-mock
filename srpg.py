@@ -127,6 +127,7 @@ class Game:
         pyxel.init(SCREEN_W, SCREEN_H, title="SRPG モック", fps=30)
         self.font12 = pyxel.Font("umplus_j12r.bdf")
         self.font8 = pyxel.Font("misaki_gothic.bdf")
+        pyxel.images[0].load(0, 0, "sprites.png")
         self.map_data = create_map()
         self.units = []
         self._setup_units()
@@ -846,6 +847,8 @@ class Game:
         self._draw_popups(cx, cy)
 
     def _draw_map(self, cx, cy):
+        # Tile sprites in image bank 0: row 0 (y=0)
+        TILE_SPR = {PLAIN: (0, 0), FOREST: (24, 0), WATER: (48, 0)}
         for ty in range(VIEW_H + 1):
             for tx in range(VIEW_W + 1):
                 mx, my = tx + cx, ty + cy
@@ -853,20 +856,8 @@ class Game:
                     continue
                 terrain = self.map_data[my][mx]
                 sx, sy = tx * TILE, ty * TILE
-
-                if terrain == PLAIN:
-                    pyxel.rect(sx, sy, TILE, TILE, 3)
-                elif terrain == FOREST:
-                    pyxel.rect(sx, sy, TILE, TILE, 3)
-                    pyxel.tri(sx + 12, sy + 3, sx + 4, sy + 16, sx + 20, sy + 16, 11)
-                    pyxel.rect(sx + 10, sy + 16, 4, 6, 4)
-                elif terrain == WATER:
-                    pyxel.rect(sx, sy, TILE, TILE, 1)
-                    pyxel.line(sx + 2, sy + 7, sx + 8, sy + 4, 12)
-                    pyxel.line(sx + 8, sy + 4, sx + 14, sy + 7, 12)
-                    pyxel.line(sx + 14, sy + 7, sx + 21, sy + 4, 12)
-                    pyxel.line(sx + 3, sy + 15, sx + 9, sy + 12, 6)
-                    pyxel.line(sx + 9, sy + 12, sx + 15, sy + 15, 6)
+                spr_x, spr_y = TILE_SPR[terrain]
+                pyxel.blt(sx, sy, 0, spr_x, spr_y, TILE, TILE)
 
     def _draw_highlights(self, cx, cy):
         for mx, my in self.hover_preview_move:
@@ -942,23 +933,16 @@ class Game:
 
             is_player_turn = self.state in (ST_FREE, ST_SELECTED, ST_MOVED, ST_ATTACK)
             show_done = u.done and ((u.team == PLAYER and is_player_turn) or (u.team == ENEMY and not is_player_turn))
-            if show_done:
-                bg = 13
-            elif u.team == PLAYER:
-                bg = 5
-            else:
-                bg = 2
 
-            pyxel.rect(sx + 2, sy + 2, TILE - 4, TILE - 4, bg)
-
-            char = ["槍", "騎", "弓"][u.type]
+            # Sprite coordinates in image bank 0
+            spr_x = u.type * TILE  # spear=0, cavalry=24, archer=48
             if show_done:
-                tcol = 7
+                spr_y = 72
             elif u.team == PLAYER:
-                tcol = 12
+                spr_y = 24
             else:
-                tcol = 9
-            pyxel.text(sx + 6, sy + 4, char, tcol, self.font12)
+                spr_y = 48
+            pyxel.blt(sx, sy, 0, spr_x, spr_y, TILE, TILE, colkey=1)
 
             if u.is_general:
                 pyxel.text(sx + TILE - 8, sy + 1, "*", 10)
@@ -976,10 +960,10 @@ class Game:
             bw = TILE - 6
             ratio = u.hp / u.max_hp
             filled = max(0, int(bw * ratio))
-            pyxel.rect(sx + 3, sy + TILE - 5, bw, 3, 0)
-            hcol = 11 if ratio > 0.6 else (10 if ratio > 0.3 else 8)
+            pyxel.rect(sx + 3, sy + TILE - 4, bw, 2, 0)
+            hcol = 10 if ratio > 0.6 else (9 if ratio > 0.3 else 8)
             if filled > 0:
-                pyxel.rect(sx + 3, sy + TILE - 5, filled, 3, hcol)
+                pyxel.rect(sx + 3, sy + TILE - 4, filled, 2, hcol)
 
     def _draw_cursor(self, cx, cy):
         if self.state in (ST_WIN, ST_LOSE, ST_ENEMY):
