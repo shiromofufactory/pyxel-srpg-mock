@@ -154,6 +154,8 @@ class Game:
         self._last_cursor_cell = None
         self.ctx_menu = False
         self.confirm_dialog = None  # {"text": str, "action": str}
+        self._pending_end_turn = False
+        self._pending_game_end = None  # ST_WIN or ST_LOSE
         self.phase_popup_until = 0.0
         self.phase_popup_text = f"ターン {self.turn}  自フェイズ"
         self.phase_popup_col = 12
@@ -217,20 +219,24 @@ class Game:
                 self.cam_y = max(0.0, min(float(MAP_H - VIEW_H), new_cam))
                 self.ctx_menu = False
                 self.confirm_dialog = None
+                self.hover_unit = None
 
         tap = False
+        had_hover = self.hover_unit is not None
         if just_released:
             if not self._dragging and self._drag_start:
                 tap = True
                 tap_mx, tap_my = self._drag_start
                 self._tap_screen_pos = (tap_mx, tap_my)
-                icy = int(self.cam_y)
-                self.cur_tx = max(0, min(MAP_W - 1, tap_mx // TILE))
-                self.cur_ty = max(0, min(MAP_H - 1, icy + tap_my // TILE))
-                self.hover_unit = next(
-                    (u for u in self.units if u.alive and u.x == self.cur_tx and u.y == self.cur_ty),
-                    None,
-                )
+                # Skip cursor/hover update when menu or dialog is open
+                if not self.ctx_menu and not self.confirm_dialog:
+                    icy = int(self.cam_y)
+                    self.cur_tx = max(0, min(MAP_W - 1, tap_mx // TILE))
+                    self.cur_ty = max(0, min(MAP_H - 1, icy + tap_my // TILE))
+                    self.hover_unit = next(
+                        (u for u in self.units if u.alive and u.x == self.cur_tx and u.y == self.cur_ty),
+                        None,
+                    )
             self._drag_start = None
             self._dragging = False
 
@@ -284,6 +290,17 @@ class Game:
             if u.fade_timer > 0:
                 u.fade_timer -= 1
 
+        # Show pending results/dialogs after popups/fading finish
+        fading = any(u.fade_timer > 0 for u in self.units)
+        if not self.popups and not fading:
+            if self._pending_game_end is not None:
+                self.state = self._pending_game_end
+                self._pending_game_end = None
+                self._pending_end_turn = False
+            elif self._pending_end_turn:
+                self._pending_end_turn = False
+                self.confirm_dialog = {"text": "ターンを終了しますか？", "action": "end_turn"}
+
         if self.anim_path:
             self._upd_anim()
             return
@@ -304,7 +321,7 @@ class Game:
             return
 
         if self.state == ST_FREE:
-            self._upd_free(tap)
+            self._upd_free(tap, had_hover)
         elif self.state == ST_SELECTED:
             self._upd_selected(tap)
         elif self.state == ST_MOVED:
@@ -356,7 +373,7 @@ class Game:
         # Tap outside menu → close
         self.ctx_menu = False
 
-    def _upd_free(self, tap):
+    def _upd_free(self, tap, had_hover=False):
         if not tap:
             return
 
@@ -387,8 +404,8 @@ class Game:
         if any_unit:
             return
 
-        # If hover info is showing, first tap just dismisses it
-        if self.hover_unit:
+        # If hover info was showing, first tap just dismisses it
+        if had_hover:
             self.hover_unit = None
             return
 
@@ -439,7 +456,7 @@ class Game:
             self.cursor_atk_preview = set()
             self._last_cursor_cell = None
             self._check_game_end()
-            if self.state not in (ST_WIN, ST_LOSE):
+            if not self._pending_game_end:
                 self._finish_unit()
             return
 
@@ -495,7 +512,7 @@ class Game:
                 self.sel.attacked = True
                 self.atk_cells = set()
                 self._check_game_end()
-                if self.state not in (ST_WIN, ST_LOSE):
+                if not self._pending_game_end:
                     self._finish_unit()
             return
 
@@ -518,7 +535,7 @@ class Game:
         alive_players = [u for u in self.units if u.team == PLAYER and u.alive]
         if not alive_players or all(u.done for u in alive_players):
             self.state = ST_FREE
-            self.confirm_dialog = {"text": "ターンを終了しますか？", "action": "end_turn"}
+            self._pending_end_turn = True
         else:
             self.state = ST_FREE
 
@@ -545,6 +562,8 @@ class Game:
         self._last_cursor_cell = None
         self.ctx_menu = False
         self.confirm_dialog = None
+        self._pending_end_turn = False
+        self._pending_game_end = None
         self.popups = []
         self.phase_popup_text = f"ターン {self.turn}  自フェイズ"
         self.phase_popup_col = 12
@@ -554,9 +573,9 @@ class Game:
         pg = next((u for u in self.units if u.team == PLAYER and u.is_general and u.alive), None)
         eg = next((u for u in self.units if u.team == ENEMY and u.is_general and u.alive), None)
         if not eg:
-            self.state = ST_WIN
+            self._pending_game_end = ST_WIN
         elif not pg:
-            self.state = ST_LOSE
+            self._pending_game_end = ST_LOSE
 
     def _start_enemy_turn(self):
         self.state = ST_ENEMY
@@ -571,6 +590,8 @@ class Game:
         self.atk_cells = set()
         self.ctx_menu = False
         self.confirm_dialog = None
+        self._pending_end_turn = False
+        self._pending_game_end = None
         self.hover_unit = None
         self.hover_preview_move = set()
         self.hover_preview_atk = set()
@@ -683,7 +704,7 @@ class Game:
     def _finish_enemy_unit(self, unit):
         self.sel = None
         self._check_game_end()
-        if self.state not in (ST_WIN, ST_LOSE):
+        if not self._pending_game_end:
             self.enemy_timer = ENEMY_INTERVAL
 
     def _do_attack(self, attacker, defender):
