@@ -275,8 +275,20 @@ class Game:
             if u.fade_timer > 0:
                 u.fade_timer -= 1
 
+        # Phase popup blocks all game logic; tap to dismiss
+        if time.time() < self.phase_popup_until:
+            if tap:
+                self.phase_popup_until = 0.0
+            return
+
         if self.anim_path:
             self._upd_anim()
+            return
+
+        # Win/Lose: tap to restart
+        if self.state in (ST_WIN, ST_LOSE):
+            if tap:
+                self._restart()
             return
 
         if self.state == ST_FREE:
@@ -460,6 +472,33 @@ class Game:
             self._start_enemy_turn()
         else:
             self.state = ST_FREE
+
+    def _restart(self):
+        self.units = []
+        self._setup_units()
+        self.cam_y = float(MAP_H - VIEW_H)
+        self.state = ST_FREE
+        self.sel = None
+        self.move_cells = set()
+        self.atk_cells = set()
+        self.pre_move = None
+        self.hover_unit = None
+        self.turn = 1
+        self.enemy_queue = []
+        self.enemy_timer = 0
+        self.anim_path = []
+        self.anim_callback = None
+        self.move_parents = {}
+        self.hover_preview_move = set()
+        self.hover_preview_atk = set()
+        self._last_hover_unit = None
+        self.cursor_atk_preview = set()
+        self._last_cursor_cell = None
+        self.ctx_menu = None
+        self.popups = []
+        self.phase_popup_text = f"ターン {self.turn}  自フェイズ"
+        self.phase_popup_col = 12
+        self.phase_popup_until = time.time() + 1.5
 
     def _check_game_end(self):
         pg = next((u for u in self.units if u.team == PLAYER and u.is_general and u.alive), None)
@@ -952,13 +991,17 @@ class Game:
         pyxel.text(px + 3, py + 66, "強:" + adv + " 弱:" + weak, 7, self.font12)
 
     def _draw_result(self, msg, col):
-        w, h = 180, 44
+        w, h = 180, 58
         x = (SCREEN_W - w) // 2
         y = (SCREEN_H - h) // 2
         pyxel.rect(x, y, w, h, 0)
         pyxel.rectb(x, y, w, h, col)
         tw = self.font12.text_width(msg)
-        pyxel.text((SCREEN_W - tw) // 2, y + 16, msg, col, self.font12)
+        pyxel.text((SCREEN_W - tw) // 2, y + 12, msg, col, self.font12)
+        restart = "タップでリスタート"
+        rw = self.font12.text_width(restart)
+        if pyxel.frame_count % 40 < 28:
+            pyxel.text((SCREEN_W - rw) // 2, y + 36, restart, 13, self.font12)
 
 
 Game()
