@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__pyxel__pyxel_info",
+      "mcp__pyxel__run_and_capture"
+    ]
+  }
+}
