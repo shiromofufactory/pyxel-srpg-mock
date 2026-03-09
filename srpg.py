@@ -29,7 +29,7 @@ ST_ENEMY = 4
 ST_WIN = 5
 ST_LOSE = 6
 
-UNIT_NAMES = ["槍兵", "騎兵", "弓兵"]
+UNIT_NAMES = ["騎兵", "槍兵", "弓兵"]
 
 UNIT_STATS = {
     SPEAR: {"hp": 30, "atk": 12, "def_": 8, "mov": 4, "rng": 1},
@@ -777,9 +777,9 @@ class Game:
         ATK_PAUSE = 8
         DMG_POPUP_DUR = 12
         COUNTER_DELAY = 10
-        # Always snap camera to attacker
+        # Always snap camera to defender
         self.cam_y = max(
-            0.0, min(float(MAP_H - VIEW_H), float(attacker.y) - VIEW_H / 2)
+            0.0, min(float(MAP_H - VIEW_H), float(defender.y) - VIEW_H / 2)
         )
         base = max(1, attacker.atk - defender.def_)
         mult = TYPE_ADV.get((attacker.type, defender.type), 1.0)
@@ -1074,7 +1074,8 @@ class Game:
         sx = (self.cur_tx - cx) * TILE
         sy = (self.cur_ty - cy) * TILE
         if 0 <= sx < SCREEN_W and 0 <= sy < SCREEN_H:
-            pyxel.rectb(sx, sy, TILE, TILE, 10)
+            if self.state != ST_MOVED or pyxel.frame_count % 20 < 14:
+                pyxel.rectb(sx, sy, TILE, TILE, 10)
 
     def _draw_ui(self, cx, cy):
         # Unit info popup
@@ -1200,8 +1201,8 @@ class Game:
             px + 3, py + 52, "地形:" + tnames[self.map_data[u.y][u.x]], 7, self.font12
         )
 
-        adv = ["弓兵", "槍兵", "騎兵"][u.type]
-        weak = ["騎兵", "弓兵", "槍兵"][u.type]
+        adv = ["槍兵", "弓兵", "騎兵"][u.type]
+        weak = ["弓兵", "騎兵", "槍兵"][u.type]
         pyxel.text(px + 3, py + 66, "強:" + adv + " 弱:" + weak, 7, self.font12)
 
     def _draw_result(self, msg, col):
