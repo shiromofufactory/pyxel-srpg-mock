@@ -1046,6 +1046,8 @@ class Game:
                 pyxel.rectb(sx, sy, TILE, TILE, 12)
 
         for mx, my in self.cursor_atk_preview:
+            if (mx, my) in self.move_cells:
+                continue
             sx = (mx - cx) * TILE
             sy = (my - cy) * TILE
             if -TILE < sx < SCREEN_W and -TILE < sy < SCREEN_H:
