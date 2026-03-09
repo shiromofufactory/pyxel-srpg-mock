@@ -5,8 +5,8 @@ from collections import deque
 SCREEN_W = 192
 SCREEN_H = 312
 TILE = 24
-VIEW_W = 8    # 192 / 24
-VIEW_H = 13   # 312 / 24
+VIEW_W = 8  # 192 / 24
+VIEW_H = 13  # 312 / 24
 MAP_W = 8
 MAP_H = 20
 
@@ -32,15 +32,15 @@ ST_LOSE = 6
 UNIT_NAMES = ["槍兵", "騎兵", "弓兵"]
 
 UNIT_STATS = {
-    SPEAR:   {"hp": 30, "atk": 12, "def_": 8,  "mov": 4, "rng": 1},
-    CAVALRY: {"hp": 22, "atk": 15, "def_": 5,  "mov": 6, "rng": 1},
-    ARCHER:  {"hp": 18, "atk": 10, "def_": 4,  "mov": 4, "rng": 3},
+    SPEAR: {"hp": 30, "atk": 12, "def_": 8, "mov": 4, "rng": 1},
+    CAVALRY: {"hp": 22, "atk": 15, "def_": 5, "mov": 6, "rng": 1},
+    ARCHER: {"hp": 18, "atk": 10, "def_": 4, "mov": 4, "rng": 3},
 }
 
 MOVE_COST = {
-    SPEAR:   [1, 2, 99],
+    SPEAR: [1, 2, 99],
     CAVALRY: [1, 3, 99],
-    ARCHER:  [1, 2, 99],
+    ARCHER: [1, 2, 99],
 }
 
 FOREST_DEF = 2
@@ -61,12 +61,12 @@ def create_map():
 
     # Symmetric forests (top-bottom mirror)
     forests = [
-        (0, 0, 2, 2),    # top-left corner
-        (6, 0, 8, 2),    # top-right corner
-        (1, 4, 3, 6),    # upper-left patch
-        (5, 4, 7, 6),    # upper-right patch
-        (0, 7, 2, 9),    # mid-upper left
-        (6, 7, 8, 9),    # mid-upper right
+        (0, 0, 2, 2),  # top-left corner
+        (6, 0, 8, 2),  # top-right corner
+        (1, 4, 3, 6),  # upper-left patch
+        (5, 4, 7, 6),  # upper-right patch
+        (0, 7, 2, 9),  # mid-upper left
+        (6, 7, 8, 9),  # mid-upper right
         (0, 11, 2, 13),  # mid-lower left
         (6, 11, 8, 13),  # mid-lower right
         (1, 14, 3, 16),  # lower-left patch
@@ -168,27 +168,31 @@ class Game:
         self._dragging = False
         self._tap_screen_pos = (0, 0)
         pyxel.mouse(False)
+        # BGM
+        pyxel.sounds[63].pcm("srpg-demo.wav")
+        pyxel.channels[0].gain = 0.8
+        pyxel.play(0, 63, loop=True)
         pyxel.run(self.update, self.draw)
 
     def _setup_units(self):
         psetup = [
-            (SPEAR,   3, 17, True),
-            (SPEAR,   4, 17, False),
+            (SPEAR, 3, 17, True),
+            (SPEAR, 4, 17, False),
             (CAVALRY, 2, 16, False),
             (CAVALRY, 5, 16, False),
-            (ARCHER,  1, 18, False),
-            (ARCHER,  6, 18, False),
+            (ARCHER, 1, 18, False),
+            (ARCHER, 6, 18, False),
         ]
         for t, x, y, g in psetup:
             self.units.append(Unit(t, PLAYER, x, y, g))
 
         esetup = [
-            (SPEAR,   4, 2, True),
-            (SPEAR,   3, 2, False),
+            (SPEAR, 4, 2, True),
+            (SPEAR, 3, 2, False),
             (CAVALRY, 5, 3, False),
             (CAVALRY, 2, 3, False),
-            (ARCHER,  6, 1, False),
-            (ARCHER,  1, 1, False),
+            (ARCHER, 6, 1, False),
+            (ARCHER, 1, 1, False),
         ]
         for t, x, y, g in esetup:
             self.units.append(Unit(t, ENEMY, x, y, g))
@@ -216,7 +220,9 @@ class Game:
             if not self._dragging and abs(dy) > SWIPE_THRESHOLD:
                 self._dragging = True
             if self._dragging and self.state not in (ST_WIN, ST_LOSE):
-                new_cam = self._drag_cam_start + (self._drag_start[1] - pyxel.mouse_y) / TILE
+                new_cam = (
+                    self._drag_cam_start + (self._drag_start[1] - pyxel.mouse_y) / TILE
+                )
                 self.cam_y = max(0.0, min(float(MAP_H - VIEW_H), new_cam))
                 self.ctx_menu = False
                 self.confirm_dialog = None
@@ -235,7 +241,11 @@ class Game:
                     self.cur_tx = max(0, min(MAP_W - 1, tap_mx // TILE))
                     self.cur_ty = max(0, min(MAP_H - 1, icy + tap_my // TILE))
                     self.hover_unit = next(
-                        (u for u in self.units if u.alive and u.x == self.cur_tx and u.y == self.cur_ty),
+                        (
+                            u
+                            for u in self.units
+                            if u.alive and u.x == self.cur_tx and u.y == self.cur_ty
+                        ),
                         None,
                     )
             self._drag_start = None
@@ -265,7 +275,9 @@ class Game:
         if self.state == ST_SELECTED and self.sel and cur_cell in self.move_cells:
             if cur_cell != self._last_cursor_cell:
                 self._last_cursor_cell = cur_cell
-                self.cursor_atk_preview = self._get_atk_range_from(self.sel, cur_cell[0], cur_cell[1])
+                self.cursor_atk_preview = self._get_atk_range_from(
+                    self.sel, cur_cell[0], cur_cell[1]
+                )
         else:
             if self._last_cursor_cell is not None:
                 self._last_cursor_cell = None
@@ -300,7 +312,10 @@ class Game:
                 self._pending_end_turn = False
             elif self._pending_end_turn:
                 self._pending_end_turn = False
-                self.confirm_dialog = {"text": "ターンを終了しますか？", "action": "end_turn"}
+                self.confirm_dialog = {
+                    "text": "ターンを終了しますか？",
+                    "action": "end_turn",
+                }
 
         if self.anim_path:
             self._upd_anim()
@@ -366,10 +381,16 @@ class Game:
             idx = (tmy - my) // item_h
             if idx == 0:
                 self.ctx_menu = False
-                self.confirm_dialog = {"text": "ターンを終了しますか？", "action": "end_turn"}
+                self.confirm_dialog = {
+                    "text": "ターンを終了しますか？",
+                    "action": "end_turn",
+                }
             elif idx == 1:
                 self.ctx_menu = False
-                self.confirm_dialog = {"text": "最初からやり直しますか？", "action": "restart"}
+                self.confirm_dialog = {
+                    "text": "最初からやり直しますか？",
+                    "action": "restart",
+                }
             return
         # Tap outside menu → close
         self.ctx_menu = False
@@ -382,9 +403,15 @@ class Game:
 
         # Tap on actionable player unit → select
         u = next(
-            (u for u in self.units
-             if u.alive and u.team == PLAYER and not u.done
-             and u.x == cx and u.y == cy),
+            (
+                u
+                for u in self.units
+                if u.alive
+                and u.team == PLAYER
+                and not u.done
+                and u.x == cx
+                and u.y == cy
+            ),
             None,
         )
         if u:
@@ -421,9 +448,16 @@ class Game:
 
         # Tap on other actionable player unit → switch selection
         other = next(
-            (u for u in self.units
-             if u.alive and u.team == PLAYER and not u.done
-             and u.x == cx and u.y == cy and u != self.sel),
+            (
+                u
+                for u in self.units
+                if u.alive
+                and u.team == PLAYER
+                and not u.done
+                and u.x == cx
+                and u.y == cy
+                and u != self.sel
+            ),
             None,
         )
         if other:
@@ -444,9 +478,15 @@ class Game:
         # Tap on enemy in attack range → attack without moving
         cur_atk = self._get_atk_range(self.sel)
         enemy_at = next(
-            (u for u in self.units
-             if u.alive and u.team == ENEMY and u.x == cx and u.y == cy
-             and (cx, cy) in cur_atk),
+            (
+                u
+                for u in self.units
+                if u.alive
+                and u.team == ENEMY
+                and u.x == cx
+                and u.y == cy
+                and (cx, cy) in cur_atk
+            ),
             None,
         )
         if enemy_at:
@@ -469,10 +509,12 @@ class Game:
             self.cursor_atk_preview = set()
             self._last_cursor_cell = None
             if len(path) > 1:
+
                 def on_done():
                     self.sel.moved = True
                     self.atk_cells = self._get_targetable_cells(self.sel)
                     self.state = ST_MOVED
+
                 self._start_move_anim(self.sel, path, on_done)
             else:
                 self.sel.x, self.sel.y = cx, cy
@@ -504,8 +546,11 @@ class Game:
         # Tap on enemy in attack range → attack
         if (cx, cy) in self.atk_cells:
             target = next(
-                (u for u in self.units
-                 if u.alive and u.team == ENEMY and u.x == cx and u.y == cy),
+                (
+                    u
+                    for u in self.units
+                    if u.alive and u.team == ENEMY and u.x == cx and u.y == cy
+                ),
                 None,
             )
             if target:
@@ -571,8 +616,14 @@ class Game:
         self.phase_popup_until = time.time() + 1.5
 
     def _check_game_end(self):
-        pg = next((u for u in self.units if u.team == PLAYER and u.is_general and u.alive), None)
-        eg = next((u for u in self.units if u.team == ENEMY and u.is_general and u.alive), None)
+        pg = next(
+            (u for u in self.units if u.team == PLAYER and u.is_general and u.alive),
+            None,
+        )
+        eg = next(
+            (u for u in self.units if u.team == ENEMY and u.is_general and u.alive),
+            None,
+        )
         if not eg:
             self._pending_game_end = ST_WIN
         elif not pg:
@@ -600,7 +651,10 @@ class Game:
         self.cursor_atk_preview = set()
         self._last_cursor_cell = None
         # Snap camera to enemy general
-        eg = next((u for u in self.units if u.team == ENEMY and u.is_general and u.alive), None)
+        eg = next(
+            (u for u in self.units if u.team == ENEMY and u.is_general and u.alive),
+            None,
+        )
         if eg:
             self.cam_y = max(0.0, min(float(MAP_H - VIEW_H), float(eg.y) - VIEW_H / 2))
         self.phase_popup_text = f"ターン {self.turn}  敵フェイズ"
@@ -621,7 +675,10 @@ class Game:
         for u in self.units:
             if u.team == PLAYER:
                 u.reset_turn()
-        pg = next((u for u in self.units if u.team == PLAYER and u.is_general and u.alive), None)
+        pg = next(
+            (u for u in self.units if u.team == PLAYER and u.is_general and u.alive),
+            None,
+        )
         if pg:
             self.cam_y = max(0.0, min(float(MAP_H - VIEW_H), float(pg.y) - VIEW_H / 2))
         self.phase_popup_text = f"ターン {self.turn}  自フェイズ"
@@ -647,7 +704,9 @@ class Game:
 
         unit = self.enemy_queue.pop(0)
         if unit.alive and not unit.done:
-            self.cam_y = max(0.0, min(float(MAP_H - VIEW_H), float(unit.y) - VIEW_H / 2))
+            self.cam_y = max(
+                0.0, min(float(MAP_H - VIEW_H), float(unit.y) - VIEW_H / 2)
+            )
             self._ai_act(unit)
         else:
             unit.moved = True
@@ -681,15 +740,21 @@ class Game:
 
         if len(path) > 1:
             self.sel = unit
+
             def on_done():
                 unit.moved = True
                 atk2 = self._get_atk_range(unit)
-                targets = [u for u in self.units if u.team == PLAYER and u.alive and (u.x, u.y) in atk2]
+                targets = [
+                    u
+                    for u in self.units
+                    if u.team == PLAYER and u.alive and (u.x, u.y) in atk2
+                ]
                 if targets:
                     t = min(targets, key=lambda u: u.hp)
                     self._do_attack(unit, t)
                 unit.attacked = True
                 self._finish_enemy_unit(unit)
+
             self._start_move_anim(unit, path, on_done)
         else:
             unit.x, unit.y = best_pos
@@ -713,15 +778,25 @@ class Game:
         DMG_POPUP_DUR = 12
         COUNTER_DELAY = 10
         # Always snap camera to attacker
-        self.cam_y = max(0.0, min(float(MAP_H - VIEW_H), float(attacker.y) - VIEW_H / 2))
+        self.cam_y = max(
+            0.0, min(float(MAP_H - VIEW_H), float(attacker.y) - VIEW_H / 2)
+        )
         base = max(1, attacker.atk - defender.def_)
         mult = TYPE_ADV.get((attacker.type, defender.type), 1.0)
         tdef = FOREST_DEF if self.map_data[defender.y][defender.x] == FOREST else 0
         dmg = max(1, int((base - tdef) * mult))
         defender.hp = max(0, defender.hp - dmg)
-        self.popups.append({"x": defender.x, "y": defender.y, "text": str(dmg),
-                            "timer": DMG_POPUP_DUR, "col": 8, "oy": 0,
-                            "delay": ATK_PAUSE})
+        self.popups.append(
+            {
+                "x": defender.x,
+                "y": defender.y,
+                "text": str(dmg),
+                "timer": DMG_POPUP_DUR,
+                "col": 8,
+                "oy": 0,
+                "delay": ATK_PAUSE,
+            }
+        )
         if defender.hp <= 0:
             defender.fade_timer = 20 + ATK_PAUSE
 
@@ -730,12 +805,22 @@ class Game:
             if (attacker.x, attacker.y) in crng:
                 cbase = max(1, defender.atk - attacker.def_)
                 cmult = TYPE_ADV.get((defender.type, attacker.type), 1.0)
-                tdef2 = FOREST_DEF if self.map_data[attacker.y][attacker.x] == FOREST else 0
+                tdef2 = (
+                    FOREST_DEF if self.map_data[attacker.y][attacker.x] == FOREST else 0
+                )
                 cdmg = max(1, int((cbase - tdef2) * cmult))
                 attacker.hp = max(0, attacker.hp - cdmg)
-                self.popups.append({"x": attacker.x, "y": attacker.y, "text": str(cdmg),
-                                    "timer": DMG_POPUP_DUR, "col": 8, "oy": 0,
-                                    "delay": ATK_PAUSE + COUNTER_DELAY})
+                self.popups.append(
+                    {
+                        "x": attacker.x,
+                        "y": attacker.y,
+                        "text": str(cdmg),
+                        "timer": DMG_POPUP_DUR,
+                        "col": 8,
+                        "oy": 0,
+                        "delay": ATK_PAUSE + COUNTER_DELAY,
+                    }
+                )
                 if attacker.hp <= 0:
                     attacker.fade_timer = 20 + ATK_PAUSE + COUNTER_DELAY
 
@@ -747,8 +832,11 @@ class Game:
         parent = {start: None}
         queue = deque([(unit.x, unit.y, unit.mov)])
         enemy_pos = {(u.x, u.y) for u in self.units if u.team != unit.team and u.alive}
-        ally_pos = {(u.x, u.y) for u in self.units
-                    if u.team == unit.team and u.alive and u != unit}
+        ally_pos = {
+            (u.x, u.y)
+            for u in self.units
+            if u.team == unit.team and u.alive and u != unit
+        }
 
         while queue:
             x, y, rem = queue.popleft()
@@ -776,7 +864,8 @@ class Game:
     def _is_zoc(self, x, y, team):
         et = 1 - team
         return any(
-            u for u in self.units
+            u
+            for u in self.units
             if u.team == et and u.alive and abs(u.x - x) + abs(u.y - y) == 1
         )
 
@@ -916,7 +1005,9 @@ class Game:
                     pyxel.dither(0.25)
                     pyxel.rect(sx, sy, TILE, TILE, 6)
                     pyxel.dither(1.0)
-                pyxel.circ(sx + TILE // 2, sy + TILE // 2, 3, 10 if i <= self.anim_step else 6)
+                pyxel.circ(
+                    sx + TILE // 2, sy + TILE // 2, 3, 10 if i <= self.anim_step else 6
+                )
 
     def _draw_units(self, cx, cy):
         for u in self.units:
@@ -932,7 +1023,10 @@ class Game:
                 pyxel.dither(u.fade_timer / 20.0)
 
             is_player_turn = self.state in (ST_FREE, ST_SELECTED, ST_MOVED, ST_ATTACK)
-            show_done = u.done and ((u.team == PLAYER and is_player_turn) or (u.team == ENEMY and not is_player_turn))
+            show_done = u.done and (
+                (u.team == PLAYER and is_player_turn)
+                or (u.team == ENEMY and not is_player_turn)
+            )
 
             # Sprite coordinates in image bank 0
             spr_x = u.type * TILE  # spear=0, cavalry=24, archer=48
@@ -954,7 +1048,6 @@ class Game:
             if u == self.sel:
                 if self.state != ST_MOVED or pyxel.frame_count % 20 < 14:
                     pyxel.rectb(sx, sy, TILE, TILE, 10)
-                    pyxel.rectb(sx + 1, sy + 1, TILE - 2, TILE - 2, 10)
 
             # HP bar
             bw = TILE - 6
@@ -972,7 +1065,9 @@ class Game:
         show = False
         if self.state in (ST_SELECTED, ST_MOVED):
             show = True
-        elif any(u.alive and u.x == self.cur_tx and u.y == self.cur_ty for u in self.units):
+        elif any(
+            u.alive and u.x == self.cur_tx and u.y == self.cur_ty for u in self.units
+        ):
             show = True
         if not show:
             return
@@ -980,11 +1075,14 @@ class Game:
         sy = (self.cur_ty - cy) * TILE
         if 0 <= sx < SCREEN_W and 0 <= sy < SCREEN_H:
             pyxel.rectb(sx, sy, TILE, TILE, 10)
-            pyxel.rectb(sx + 1, sy + 1, TILE - 2, TILE - 2, 10)
 
     def _draw_ui(self, cx, cy):
         # Unit info popup
-        if self.hover_unit and self.state not in (ST_WIN, ST_LOSE) and not self.anim_path:
+        if (
+            self.hover_unit
+            and self.state not in (ST_WIN, ST_LOSE)
+            and not self.anim_path
+        ):
             self._draw_hover_info(self.hover_unit, cx, cy)
 
         # Context menu (centered, 2 items)
@@ -999,7 +1097,9 @@ class Game:
             items = ["ターン終了", "最初からやり直す"]
             for i, label in enumerate(items):
                 tw = self.font12.text_width(label)
-                pyxel.text(mx + (mw - tw) // 2, my + i * item_h + 6, label, 7, self.font12)
+                pyxel.text(
+                    mx + (mw - tw) // 2, my + i * item_h + 6, label, 7, self.font12
+                )
 
         # Confirm dialog
         if self.confirm_dialog:
@@ -1009,7 +1109,9 @@ class Game:
             pyxel.rect(dx, dy, dw, dh, 1)
             pyxel.rectb(dx, dy, dw, dh, 13)
             tw = self.font12.text_width(self.confirm_dialog["text"])
-            pyxel.text(dx + (dw - tw) // 2, dy + 8, self.confirm_dialog["text"], 7, self.font12)
+            pyxel.text(
+                dx + (dw - tw) // 2, dy + 8, self.confirm_dialog["text"], 7, self.font12
+            )
             btn_w, btn_h = 60, 22
             btn_y = dy + dh - btn_h - 6
             yes_x = dx + 10
@@ -1034,8 +1136,13 @@ class Game:
             pyxel.rect(x, y, w, h, 0)
             pyxel.rectb(x, y, w, h, self.phase_popup_col)
             tw = self.font12.text_width(self.phase_popup_text)
-            pyxel.text((SCREEN_W - tw) // 2, y + 14, self.phase_popup_text,
-                       self.phase_popup_col, self.font12)
+            pyxel.text(
+                (SCREEN_W - tw) // 2,
+                y + 14,
+                self.phase_popup_text,
+                self.phase_popup_col,
+                self.font12,
+            )
 
         # Win / Lose overlay
         if self.state == ST_WIN:
@@ -1084,10 +1191,14 @@ class Game:
         hcol = 11 if ratio > 0.6 else (10 if ratio > 0.3 else 8)
         pyxel.rect(bx2, by2, int(bw2 * ratio), 4, hcol)
 
-        pyxel.text(px + 3, py + 38, f"攻{u.atk} 防{u.def_} 移{u.mov} 射{u.rng}", 7, self.font12)
+        pyxel.text(
+            px + 3, py + 38, f"攻{u.atk} 防{u.def_} 移{u.mov} 射{u.rng}", 7, self.font12
+        )
 
         tnames = ["平地", "森", "川・海"]
-        pyxel.text(px + 3, py + 52, "地形:" + tnames[self.map_data[u.y][u.x]], 7, self.font12)
+        pyxel.text(
+            px + 3, py + 52, "地形:" + tnames[self.map_data[u.y][u.x]], 7, self.font12
+        )
 
         adv = ["弓兵", "槍兵", "騎兵"][u.type]
         weak = ["騎兵", "弓兵", "槍兵"][u.type]
