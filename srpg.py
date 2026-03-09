@@ -202,7 +202,7 @@ class Game:
     # ── Update ────────────────────────────────────────────────────────────────
 
     def update(self):
-        pyxel.mouse(False)
+        # pyxel.mouse(False)
         if self._first_frame:
             self._first_frame = False
             self.phase_popup_until = time.time() + 1.5
@@ -855,7 +855,7 @@ class Game:
                 "y": defender.y,
                 "text": str(dmg),
                 "timer": DMG_POPUP_DUR,
-                "col": 8,
+                "col": 14,
                 "oy": 0,
                 "delay": ATK_PAUSE,
             }
@@ -879,7 +879,7 @@ class Game:
                         "y": attacker.y,
                         "text": str(cdmg),
                         "timer": DMG_POPUP_DUR,
-                        "col": 8,
+                        "col": 14,
                         "oy": 0,
                         "delay": ATK_PAUSE + COUNTER_DELAY,
                     }
@@ -1064,24 +1064,6 @@ class Game:
                 pyxel.dither(1.0)
                 pyxel.rectb(sx, sy, TILE, TILE, 9)
 
-        if self.anim_path:
-            for i, (mx, my) in enumerate(self.anim_path):
-                sx = (mx - cx) * TILE
-                sy = (my - cy) * TILE
-                if not (-TILE < sx < SCREEN_W and -TILE < sy < SCREEN_H):
-                    continue
-                if i <= self.anim_step:
-                    pyxel.dither(0.4)
-                    pyxel.rect(sx, sy, TILE, TILE, 10)
-                    pyxel.dither(1.0)
-                else:
-                    pyxel.dither(0.25)
-                    pyxel.rect(sx, sy, TILE, TILE, 6)
-                    pyxel.dither(1.0)
-                pyxel.circ(
-                    sx + TILE // 2, sy + TILE // 2, 3, 10 if i <= self.anim_step else 6
-                )
-
     def _draw_units(self, cx, cy):
         for u in self.units:
             if not u.alive and u.fade_timer <= 0:
@@ -1247,10 +1229,16 @@ class Game:
                 continue
             sx = (p["x"] - cx) * TILE + TILE // 2
             sy = (p["y"] - cy) * TILE + int(p["oy"])
-            tw = len(p["text"]) * pyxel.FONT_WIDTH
+            full = p["text"].translate(
+                str.maketrans("0123456789", "０１２３４５６７８９")
+            )
+            tw = self.font8.text_width(full)
             px = sx - tw // 2
-            pyxel.text(px + 1, sy + 1, p["text"], 0)
-            pyxel.text(px, sy, p["text"], p["col"])
+            for dx in (1, 2):
+                pyxel.text(px + dx, sy + 1, full, 0, self.font8)
+            pyxel.text(px + 1, sy, full, 0, self.font8)
+            pyxel.text(px, sy, full, p["col"], self.font8)
+            pyxel.text(px + 1, sy, full, p["col"], self.font8)
 
     def _draw_hover_info(self, u, cx, cy):
         sy_unit = (u.y - cy) * TILE + TILE // 2
