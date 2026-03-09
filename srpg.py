@@ -1099,19 +1099,22 @@ class Game:
             if fading:
                 pyxel.dither(1.0)
 
+            is_animating = self.anim_path and u == self.sel
+
             # Selected unit highlight
-            if u == self.sel:
+            if u == self.sel and not is_animating:
                 if self.state != ST_MOVED or pyxel.frame_count % 20 < 14:
                     pyxel.rectb(sx, sy, TILE, TILE, 10)
 
             # HP bar
-            bw = TILE - 6
-            ratio = u.hp / u.max_hp
-            filled = max(0, int(bw * ratio))
-            pyxel.rect(sx + 3, sy + TILE - 4, bw, 2, 0)
-            hcol = 10 if ratio > 0.6 else (9 if ratio > 0.3 else 8)
-            if filled > 0:
-                pyxel.rect(sx + 3, sy + TILE - 4, filled, 2, hcol)
+            if not is_animating:
+                bw = TILE - 6
+                ratio = u.hp / u.max_hp
+                filled = max(0, int(bw * ratio))
+                pyxel.rect(sx + 3, sy + TILE - 4, bw, 2, 0)
+                hcol = 10 if ratio > 0.6 else (9 if ratio > 0.3 else 8)
+                if filled > 0:
+                    pyxel.rect(sx + 3, sy + TILE - 4, filled, 2, hcol)
 
     def _draw_cursor(self, cx, cy):
         if self.state in (ST_WIN, ST_LOSE, ST_ENEMY):
