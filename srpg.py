@@ -135,6 +135,7 @@ class Game:
         self.state = ST_FREE
         self.sel = None
         self.move_cells = set()
+        self.sel_atk_range = set()
         self.atk_cells = set()
         self.pre_move = None
         self.hover_unit = None
@@ -154,6 +155,7 @@ class Game:
         self.cursor_atk_preview = set()
         self._last_cursor_cell = None
         self.ctx_menu = False
+        self.unit_menu = None  # {"unit": Unit, "sx": int, "sy": int, "items": list}
         self.confirm_dialog = None  # {"text": str, "action": str}
         self._pending_end_turn = False
         self._pending_game_end = None  # ST_WIN or ST_LOSE
@@ -225,6 +227,7 @@ class Game:
                 )
                 self.cam_y = max(0.0, min(float(MAP_H - VIEW_H), new_cam))
                 self.ctx_menu = False
+                self.unit_menu = None
                 self.confirm_dialog = None
                 self.hover_unit = None
 
@@ -236,7 +239,7 @@ class Game:
                 tap_mx, tap_my = self._drag_start
                 self._tap_screen_pos = (tap_mx, tap_my)
                 # Skip cursor/hover update when menu or dialog is open
-                if not self.ctx_menu and not self.confirm_dialog:
+                if not self.ctx_menu and not self.confirm_dialog and not self.unit_menu:
                     icy = int(self.cam_y)
                     self.cur_tx = max(0, min(MAP_W - 1, tap_mx // TILE))
                     self.cur_ty = max(0, min(MAP_H - 1, icy + tap_my // TILE))
@@ -335,6 +338,10 @@ class Game:
         if self.ctx_menu and tap:
             self._upd_ctx_menu()
             return
+        # Unit command menu handling
+        if self.unit_menu and tap:
+            self._upd_unit_menu()
+            return
 
         if self.state == ST_FREE:
             self._upd_free(tap, had_hover)
@@ -370,6 +377,47 @@ class Game:
         # Tap outside dialog → close
         if not (dx <= tmx <= dx + dw and dy <= tmy <= dy + dh):
             self.confirm_dialog = None
+
+    def _show_unit_menu(self, unit, tx, ty):
+        mw, item_h = 100, 24
+        items = ["待機"]
+        mh = item_h * len(items)
+        icy = int(self.cam_y)
+        # Position menu next to the unit tile
+        sx = (tx + 1) * TILE
+        if sx + mw > SCREEN_W:
+            sx = tx * TILE - mw
+        sy = (ty - icy) * TILE
+        if sy + mh > SCREEN_H:
+            sy = SCREEN_H - mh
+        if sy < 0:
+            sy = 0
+        self.unit_menu = {"unit": unit, "sx": sx, "sy": sy, "items": items}
+
+    def _upd_unit_menu(self):
+        tmx, tmy = self._tap_screen_pos
+        um = self.unit_menu
+        mw, item_h = 100, 24
+        items = um["items"]
+        mh = item_h * len(items)
+        mx, my = um["sx"], um["sy"]
+        if mx <= tmx <= mx + mw and my <= tmy <= my + mh:
+            idx = (tmy - my) // item_h
+            if 0 <= idx < len(items):
+                action = items[idx]
+                unit = um["unit"]
+                self.unit_menu = None
+                if action == "待機":
+                    unit.moved = True
+                    unit.attacked = True
+                    self.move_cells = set()
+                    self.sel_atk_range = set()
+                    self.cursor_atk_preview = set()
+                    self._last_cursor_cell = None
+                    self._finish_unit()
+            return
+        # Tap outside menu → close
+        self.unit_menu = None
 
     def _upd_ctx_menu(self):
         tmx, tmy = self._tap_screen_pos
@@ -417,6 +465,10 @@ class Game:
         if u:
             self.sel = u
             self.move_cells = self._get_move_range(u)
+            sa = set()
+            for mx2, my2 in self.move_cells:
+                sa |= self._get_atk_range_from(u, mx2, my2)
+            self.sel_atk_range = sa - self.move_cells
             self.atk_cells = set()
             self.hover_preview_move = set()
             self.hover_preview_atk = set()
@@ -463,16 +515,15 @@ class Game:
         if other:
             self.sel = other
             self.move_cells = self._get_move_range(other)
+            sa = set()
+            for mx2, my2 in self.move_cells:
+                sa |= self._get_atk_range_from(other, mx2, my2)
+            self.sel_atk_range = sa - self.move_cells
             return
 
-        # Tap on own tile → wait immediately
+        # Tap on own tile → show unit command menu
         if cx == self.sel.x and cy == self.sel.y:
-            self.sel.moved = True
-            self.sel.attacked = True
-            self.move_cells = set()
-            self.cursor_atk_preview = set()
-            self._last_cursor_cell = None
-            self._finish_unit()
+            self._show_unit_menu(self.sel, cx, cy)
             return
 
         # Tap on enemy in attack range → attack without moving
@@ -494,6 +545,7 @@ class Game:
             self._do_attack(self.sel, enemy_at)
             self.sel.attacked = True
             self.move_cells = set()
+            self.sel_atk_range = set()
             self.cursor_atk_preview = set()
             self._last_cursor_cell = None
             self._check_game_end()
@@ -506,6 +558,7 @@ class Game:
             self.pre_move = (self.sel.x, self.sel.y)
             path = self._reconstruct_path((cx, cy))
             self.move_cells = set()
+            self.sel_atk_range = set()
             self.cursor_atk_preview = set()
             self._last_cursor_cell = None
             if len(path) > 1:
@@ -526,6 +579,7 @@ class Game:
         # Tap on non-movable tile → deselect (right-click equivalent)
         self.sel = None
         self.move_cells = set()
+        self.sel_atk_range = set()
         self.cursor_atk_preview = set()
         self._last_cursor_cell = None
         self.state = ST_FREE
@@ -569,11 +623,13 @@ class Game:
         self.sel = None
         self.atk_cells = set()
         self.move_cells = set()
+        self.sel_atk_range = set()
         self.state = ST_FREE
 
     def _finish_unit(self):
         self.sel = None
         self.move_cells = set()
+        self.sel_atk_range = set()
         self.atk_cells = set()
         self.hover_unit = None
         if self.state in (ST_WIN, ST_LOSE):
@@ -592,6 +648,7 @@ class Game:
         self.state = ST_FREE
         self.sel = None
         self.move_cells = set()
+        self.sel_atk_range = set()
         self.atk_cells = set()
         self.pre_move = None
         self.hover_unit = None
@@ -607,6 +664,7 @@ class Game:
         self.cursor_atk_preview = set()
         self._last_cursor_cell = None
         self.ctx_menu = False
+        self.unit_menu = None
         self.confirm_dialog = None
         self._pending_end_turn = False
         self._pending_game_end = None
@@ -614,6 +672,8 @@ class Game:
         self.phase_popup_text = f"ターン {self.turn}  自フェイズ"
         self.phase_popup_col = 12
         self.phase_popup_until = time.time() + 1.5
+        # Replay BGM
+        pyxel.play(0, 63, loop=True)
 
     def _check_game_end(self):
         pg = next(
@@ -639,8 +699,10 @@ class Game:
         self.enemy_timer = ENEMY_INTERVAL
         self.sel = None
         self.move_cells = set()
+        self.sel_atk_range = set()
         self.atk_cells = set()
         self.ctx_menu = False
+        self.unit_menu = None
         self.confirm_dialog = None
         self._pending_end_turn = False
         self._pending_game_end = None
@@ -665,6 +727,7 @@ class Game:
         self.state = ST_FREE
         self.sel = None
         self.move_cells = set()
+        self.sel_atk_range = set()
         self.atk_cells = set()
         self.hover_unit = None
         self.hover_preview_move = set()
@@ -965,6 +1028,14 @@ class Game:
                 pyxel.rect(sx, sy, TILE, TILE, 8)
                 pyxel.dither(1.0)
 
+        for mx, my in self.sel_atk_range:
+            sx = (mx - cx) * TILE
+            sy = (my - cy) * TILE
+            if -TILE < sx < SCREEN_W and -TILE < sy < SCREEN_H:
+                pyxel.dither(0.3)
+                pyxel.rect(sx, sy, TILE, TILE, 8)
+                pyxel.dither(1.0)
+
         for mx, my in self.move_cells:
             sx = (mx - cx) * TILE
             sy = (my - cy) * TILE
@@ -1085,6 +1156,23 @@ class Game:
             and not self.anim_path
         ):
             self._draw_hover_info(self.hover_unit, cx, cy)
+
+        # Unit command menu (near the unit)
+        if self.unit_menu and not self.confirm_dialog:
+            um = self.unit_menu
+            mw, item_h = 100, 24
+            items = um["items"]
+            mh = item_h * len(items)
+            mx, my = um["sx"], um["sy"]
+            pyxel.rect(mx, my, mw, mh, 1)
+            pyxel.rectb(mx, my, mw, mh, 13)
+            for i, label in enumerate(items):
+                if i > 0:
+                    pyxel.line(mx, my + i * item_h, mx + mw - 1, my + i * item_h, 13)
+                tw = self.font12.text_width(label)
+                pyxel.text(
+                    mx + (mw - tw) // 2, my + i * item_h + 6, label, 7, self.font12
+                )
 
         # Context menu (centered, 2 items)
         if self.ctx_menu and self.state == ST_FREE and not self.confirm_dialog:
